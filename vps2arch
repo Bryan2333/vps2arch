@@ -282,6 +282,9 @@ finalize() {
 
 	# Enable SSH login for user root (#3)
 	sed -i '/^#PermitRootLogin\s/s/.*/&\nPermitRootLogin yes/' /etc/ssh/sshd_config
+	if [ "$ssh_port" != "22" ]; then
+		sed -i "s/^#\?Port [0-9]*/Port $ssh_port/" /etc/ssh/sshd_config
+	fi
 	
 	# Run reflector to get updated mirrors
 	
@@ -302,15 +305,16 @@ finalize() {
 		When you are finished with your post-installation, you'll need to reboot the VM the rough way:
 		# sync ; reboot -f
 
-		Then you'll be able to connect to your VM using SSH and to login using your old root password (or "vps2arch" if you didn't have a root password).
+		Then you'll be able to connect to your VM using SSH (port $ssh_port) and to login using your old root password (or "vps2arch" if you didn't have a root password).
 	EOF
 }
 
 bootloader=grub
 network=systemd-networkd
+ssh_port=
 mirrors=
 
-while getopts ":b:m:n:h" opt; do
+while getopts ":b:m:n:p:h" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -329,6 +333,9 @@ while getopts ":b:m:n:h" opt; do
 		fi
 		network="$OPTARG"
 		;;
+	p)
+		ssh_port="$OPTARG"
+		;;
 	h)
 		cat <<-EOF
 			usage: ${0##*/} [options]
@@ -337,6 +344,7 @@ while getopts ":b:m:n:h" opt; do
 			    -b (grub|syslinux)           Use the specified bootloader. When this option is omitted, it defaults to grub.
 			    -n (systemd-networkd|netctl) Use the specified networking configuration system. When this option is omitted, it defaults to systemd-networkd.
 			    -m mirror                    Use the provided mirror (you can specify this option more than once).
+			    -p port                      Use the specified SSH port.
 
 			    -h                           Print this help message
 
@@ -356,6 +364,12 @@ while getopts ":b:m:n:h" opt; do
 	esac
 done
 shift $((OPTIND - 1))
+
+if [ -z "$ssh_port" ]; then
+	printf "Enter SSH port [22]: "
+	read -r ssh_port
+	ssh_port=${ssh_port:-22}
+fi
 
 [ -z "$mirrors" ] && mirrors=$(get_mirrors)
 
