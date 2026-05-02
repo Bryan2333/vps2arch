@@ -106,6 +106,11 @@ configure_chroot() {
 	# Generate fstab
 	chroot_exec 'genfstab /mnt >> /etc/fstab'
 
+	# Configure locale
+	sed -i "s/^#\($user_locale\)/\1/" "/root.$cpu_type/etc/locale.gen"
+	chroot_exec 'locale-gen'
+	echo "LANG=$user_locale" > "/root.$cpu_type/etc/locale.conf"
+
 	if is_openvz && [ "$kernelver" '<' '2.6.32-042stab111.1' ]; then
 		# Use my repository for OpenVZ-patched systemd
 		sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' "/root.$cpu_type/etc/pacman.conf"
@@ -313,9 +318,10 @@ finalize() {
 bootloader=grub
 network=systemd-networkd
 ssh_port=
+user_locale=
 mirrors=
 
-while getopts ":b:m:n:p:h" opt; do
+while getopts ":b:m:n:p:l:h" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -337,6 +343,9 @@ while getopts ":b:m:n:p:h" opt; do
 	p)
 		ssh_port="$OPTARG"
 		;;
+	l)
+		user_locale="$OPTARG"
+		;;
 	h)
 		cat <<-EOF
 			usage: ${0##*/} [options]
@@ -346,6 +355,7 @@ while getopts ":b:m:n:p:h" opt; do
 			    -n (systemd-networkd|netctl) Use the specified networking configuration system. When this option is omitted, it defaults to systemd-networkd.
 			    -m mirror                    Use the provided mirror (you can specify this option more than once).
 			    -p port                      Use the specified SSH port.
+			    -l locale                    Use the specified locale.
 
 			    -h                           Print this help message
 
@@ -370,6 +380,12 @@ if [ -z "$ssh_port" ]; then
 	printf "Enter SSH port [22]: "
 	read -r ssh_port
 	ssh_port=${ssh_port:-22}
+fi
+
+if [ -z "$user_locale" ]; then
+	printf "Enter locale [en_US.UTF-8]: "
+	read -r user_locale
+	user_locale=${user_locale:-en_US.UTF-8}
 fi
 
 [ -z "$mirrors" ] && mirrors=$(get_mirrors)
