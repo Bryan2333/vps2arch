@@ -174,6 +174,9 @@ install_packages() {
 	"/root.$cpu_type/usr/lib"/ld-*.so.2 --library-path "/root.$cpu_type/usr/lib" \
 		"/root.$cpu_type/usr/bin/chroot" "/root.$cpu_type" /usr/bin/pacstrap -M /mnt $packages
 	cp -L "/root.$cpu_type/etc/resolv.conf" /etc
+
+	# Copy skel files to /root
+	cp -a "/root.$cpu_type/etc/skel/." "/root.$cpu_type/mnt/root/"
 }
 
 restore_root_pass() {
