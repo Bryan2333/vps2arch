@@ -285,6 +285,7 @@ finalize() {
 	if [ "$ssh_port" != "22" ]; then
 		sed -i "s/^#\?Port [0-9]*/Port $ssh_port/" /etc/ssh/sshd_config
 	fi
+	sed -i 's/^#\(HostKey \/etc\/ssh\/ssh_host_ed25519_key\)/\1/' /etc/ssh/sshd_config
 	
 	# Run reflector to get updated mirrors
 	
