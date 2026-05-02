@@ -135,6 +135,16 @@ configure_chroot() {
 	echo "$user_hostname" > "/root.$cpu_type/etc/hostname"
 	echo "127.0.1.1 $user_hostname.localdomain $user_hostname" >> "/root.$cpu_type/etc/hosts"
 
+	# Configure BBR
+	case $enable_bbr in
+	y|Y|yes|YES)
+		cat > "/root.$cpu_type/etc/sysctl.d/99-bbr.conf" <<-EOF
+			net.core.default_qdisc = fq
+			net.ipv4.tcp_congestion_control = bbr
+		EOF
+		;;
+	esac
+
 	if is_openvz && [ "$kernelver" '<' '2.6.32-042stab111.1' ]; then
 		# Use my repository for OpenVZ-patched systemd
 		sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' "/root.$cpu_type/etc/pacman.conf"
@@ -349,9 +359,10 @@ user_locale=
 user_timezone=
 user_dns=
 user_hostname=
+enable_bbr=
 mirrors=
 
-while getopts ":b:m:n:p:l:z:d:H:h" opt; do
+while getopts ":b:m:n:p:l:z:d:H:Bh" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -385,6 +396,9 @@ while getopts ":b:m:n:p:l:z:d:H:h" opt; do
 	H)
 		user_hostname="$OPTARG"
 		;;
+	B)
+		enable_bbr=y
+		;;
 	h)
 		cat <<-EOF
 			usage: ${0##*/} [options]
@@ -398,6 +412,7 @@ while getopts ":b:m:n:p:l:z:d:H:h" opt; do
 			    -z timezone                  Use the specified timezone.
 			    -d "dns1 dns2"               Use the specified DNS servers (space separated).
 			    -H hostname                  Use the specified hostname.
+			    -B                           Enable BBR.
 
 			    -h                           Print this help message
 
@@ -446,6 +461,11 @@ if [ -z "$user_hostname" ]; then
 	printf "Enter hostname [archlinux]: "
 	read -r user_hostname
 	user_hostname=${user_hostname:-archlinux}
+fi
+
+if [ -z "$enable_bbr" ]; then
+	printf "Enable BBR? [y/N]: "
+	read -r enable_bbr
 fi
 
 [ -z "$mirrors" ] && mirrors=$(get_mirrors)
