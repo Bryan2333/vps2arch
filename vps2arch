@@ -278,7 +278,14 @@ finalize() {
 	fi
 
 	# Enable SSH login for user root (#3)
-	sed -i '/^#PermitRootLogin\s/s/.*/&\nPermitRootLogin yes/' /etc/ssh/sshd_config
+	if [ -n "$ssh_key" ]; then
+		mkdir -p /root/.ssh
+		chmod 700 /root/.ssh
+		echo "$ssh_key" > /root/.ssh/authorized_keys
+		chmod 600 /root/.ssh/authorized_keys
+	else
+		sed -i '/^#PermitRootLogin\s/s/.*/&\nPermitRootLogin yes/' /etc/ssh/sshd_config
+	fi
 	if [ "$ssh_port" != "22" ]; then
 		sed -i "s/^#\?Port [0-9]*/Port $ssh_port/" /etc/ssh/sshd_config
 	fi
@@ -340,6 +347,7 @@ finalize() {
 bootloader=grub
 network=systemd-networkd
 ssh_port=
+ssh_key=
 user_locale=
 user_timezone=
 user_dns=
@@ -347,7 +355,7 @@ user_hostname=
 enable_bbr=
 mirrors=
 
-while getopts ":b:m:n:p:l:z:d:H:Bh" opt; do
+while getopts ":b:m:n:p:l:z:d:H:k:Bh" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -381,6 +389,9 @@ while getopts ":b:m:n:p:l:z:d:H:Bh" opt; do
 	H)
 		user_hostname="$OPTARG"
 		;;
+	k)
+		ssh_key="$OPTARG"
+		;;
 	B)
 		enable_bbr=y
 		;;
@@ -397,6 +408,7 @@ while getopts ":b:m:n:p:l:z:d:H:Bh" opt; do
 			    -z timezone                  Use the specified timezone.
 			    -d "dns1 dns2"               Use the specified DNS servers (space separated).
 			    -H hostname                  Use the specified hostname.
+			    -k "ssh-key"                 Use the specified public key for root login.
 			    -B                           Enable BBR.
 
 			    -h                           Print this help message
@@ -446,6 +458,20 @@ if [ -z "$user_hostname" ]; then
 	printf "Enter hostname [archlinux]: "
 	read -r user_hostname
 	user_hostname=${user_hostname:-archlinux}
+fi
+
+if [ -z "$ssh_key" ]; then
+	printf "Do you want to use key-based login? [y/N]: "
+	read -r use_key
+	case "$use_key" in
+	[yY][eE][sS]|[yY])
+		printf "Enter public key: "
+		read -r ssh_key
+		;;
+	*)
+		ssh_key=""
+		;;
+	esac
 fi
 
 if [ -z "$enable_bbr" ]; then
