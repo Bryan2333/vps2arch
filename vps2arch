@@ -111,40 +111,6 @@ configure_chroot() {
 	chroot_exec 'locale-gen'
 	echo "LANG=$user_locale" > "/root.$cpu_type/etc/locale.conf"
 
-	# Configure timezone
-	ln -sf "/usr/share/zoneinfo/$user_timezone" "/root.$cpu_type/etc/localtime"
-
-	# Configure systemd-timesyncd
-	mkdir -p "/root.$cpu_type/etc/systemd/timesyncd.conf.d"
-	cat > "/root.$cpu_type/etc/systemd/timesyncd.conf.d/custom.conf" <<-EOF
-		[Time]
-		NTP=time.google.com time.cloudflare.com
-	EOF
-	chroot_exec 'systemctl enable systemd-timesyncd'
-
-	# Configure systemd-resolved
-	mkdir -p "/root.$cpu_type/etc/systemd/resolved.conf.d"
-	cat > "/root.$cpu_type/etc/systemd/resolved.conf.d/custom.conf" <<-EOF
-		[Resolve]
-		DNS=$user_dns
-	EOF
-	chroot_exec 'systemctl enable systemd-resolved'
-	ln -sf /run/systemd/resolve/stub-resolv.conf "/root.$cpu_type/etc/resolv.conf"
-
-	# Configure hostname
-	echo "$user_hostname" > "/root.$cpu_type/etc/hostname"
-	echo "127.0.1.1 $user_hostname.localdomain $user_hostname" >> "/root.$cpu_type/etc/hosts"
-
-	# Configure BBR
-	case $enable_bbr in
-	y|Y|yes|YES)
-		cat > "/root.$cpu_type/etc/sysctl.d/99-bbr.conf" <<-EOF
-			net.core.default_qdisc = fq
-			net.ipv4.tcp_congestion_control = bbr
-		EOF
-		;;
-	esac
-
 	if is_openvz && [ "$kernelver" '<' '2.6.32-042stab111.1' ]; then
 		# Use my repository for OpenVZ-patched systemd
 		sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' "/root.$cpu_type/etc/pacman.conf"
@@ -324,6 +290,40 @@ finalize() {
 		sed -i "s/^#\?Port [0-9]*/Port $ssh_port/" /etc/ssh/sshd_config
 	fi
 	sed -i 's/^#\(HostKey \/etc\/ssh\/ssh_host_ed25519_key\)/\1/' /etc/ssh/sshd_config
+
+	# Configure timezone
+	ln -sf "/usr/share/zoneinfo/$user_timezone" /etc/localtime
+
+	# Configure systemd-timesyncd
+	mkdir -p /etc/systemd/timesyncd.conf.d
+	cat > /etc/systemd/timesyncd.conf.d/custom.conf <<-EOF
+		[Time]
+		NTP=time.google.com time.cloudflare.com
+	EOF
+	systemctl enable systemd-timesyncd
+
+	# Configure systemd-resolved
+	mkdir -p /etc/systemd/resolved.conf.d
+	cat > /etc/systemd/resolved.conf.d/custom.conf <<-EOF
+		[Resolve]
+		DNS=$user_dns
+	EOF
+	systemctl enable systemd-resolved
+	ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+	# Configure hostname
+	echo "$user_hostname" > /etc/hostname
+	echo "127.0.1.1 $user_hostname.localdomain $user_hostname" >> /etc/hosts
+
+	# Configure BBR
+	case $enable_bbr in
+	y|Y|yes|YES)
+		cat > /etc/sysctl.d/99-bbr.conf <<-EOF
+			net.core.default_qdisc = fq_pie
+			net.ipv4.tcp_congestion_control = bbr
+		EOF
+		;;
+	esac
 	
 	# Run reflector to get updated mirrors
 	
