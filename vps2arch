@@ -122,6 +122,15 @@ configure_chroot() {
 	EOF
 	chroot_exec 'systemctl enable systemd-timesyncd'
 
+	# Configure systemd-resolved
+	mkdir -p "/root.$cpu_type/etc/systemd/resolved.conf.d"
+	cat > "/root.$cpu_type/etc/systemd/resolved.conf.d/custom.conf" <<-EOF
+		[Resolve]
+		DNS=$user_dns
+	EOF
+	chroot_exec 'systemctl enable systemd-resolved'
+	ln -sf /run/systemd/resolve/stub-resolv.conf "/root.$cpu_type/etc/resolv.conf"
+
 	if is_openvz && [ "$kernelver" '<' '2.6.32-042stab111.1' ]; then
 		# Use my repository for OpenVZ-patched systemd
 		sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' "/root.$cpu_type/etc/pacman.conf"
@@ -331,9 +340,10 @@ network=systemd-networkd
 ssh_port=
 user_locale=
 user_timezone=
+user_dns=
 mirrors=
 
-while getopts ":b:m:n:p:l:z:h" opt; do
+while getopts ":b:m:n:p:l:z:d:h" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -361,6 +371,9 @@ while getopts ":b:m:n:p:l:z:h" opt; do
 	z)
 		user_timezone="$OPTARG"
 		;;
+	d)
+		user_dns="$OPTARG"
+		;;
 	h)
 		cat <<-EOF
 			usage: ${0##*/} [options]
@@ -372,6 +385,7 @@ while getopts ":b:m:n:p:l:z:h" opt; do
 			    -p port                      Use the specified SSH port.
 			    -l locale                    Use the specified locale.
 			    -z timezone                  Use the specified timezone.
+			    -d "dns1 dns2"               Use the specified DNS servers (space separated).
 
 			    -h                           Print this help message
 
@@ -408,6 +422,12 @@ if [ -z "$user_timezone" ]; then
 	printf "Enter timezone [UTC]: "
 	read -r user_timezone
 	user_timezone=${user_timezone:-UTC}
+fi
+
+if [ -z "$user_dns" ]; then
+	printf "Enter DNS servers [1.1.1.1]: "
+	read -r user_dns
+	user_dns=${user_dns:-1.1.1.1}
 fi
 
 [ -z "$mirrors" ] && mirrors=$(get_mirrors)
