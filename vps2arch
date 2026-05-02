@@ -111,6 +111,17 @@ configure_chroot() {
 	chroot_exec 'locale-gen'
 	echo "LANG=$user_locale" > "/root.$cpu_type/etc/locale.conf"
 
+	# Configure timezone
+	ln -sf "/usr/share/zoneinfo/$user_timezone" "/root.$cpu_type/etc/localtime"
+
+	# Configure systemd-timesyncd
+	mkdir -p "/root.$cpu_type/etc/systemd/timesyncd.conf.d"
+	cat > "/root.$cpu_type/etc/systemd/timesyncd.conf.d/custom.conf" <<-EOF
+		[Time]
+		NTP=time.google.com time.cloudflare.com
+	EOF
+	chroot_exec 'systemctl enable systemd-timesyncd'
+
 	if is_openvz && [ "$kernelver" '<' '2.6.32-042stab111.1' ]; then
 		# Use my repository for OpenVZ-patched systemd
 		sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' "/root.$cpu_type/etc/pacman.conf"
@@ -319,9 +330,10 @@ bootloader=grub
 network=systemd-networkd
 ssh_port=
 user_locale=
+user_timezone=
 mirrors=
 
-while getopts ":b:m:n:p:l:h" opt; do
+while getopts ":b:m:n:p:l:z:h" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -346,6 +358,9 @@ while getopts ":b:m:n:p:l:h" opt; do
 	l)
 		user_locale="$OPTARG"
 		;;
+	z)
+		user_timezone="$OPTARG"
+		;;
 	h)
 		cat <<-EOF
 			usage: ${0##*/} [options]
@@ -356,6 +371,7 @@ while getopts ":b:m:n:p:l:h" opt; do
 			    -m mirror                    Use the provided mirror (you can specify this option more than once).
 			    -p port                      Use the specified SSH port.
 			    -l locale                    Use the specified locale.
+			    -z timezone                  Use the specified timezone.
 
 			    -h                           Print this help message
 
@@ -386,6 +402,12 @@ if [ -z "$user_locale" ]; then
 	printf "Enter locale [en_US.UTF-8]: "
 	read -r user_locale
 	user_locale=${user_locale:-en_US.UTF-8}
+fi
+
+if [ -z "$user_timezone" ]; then
+	printf "Enter timezone [UTC]: "
+	read -r user_timezone
+	user_timezone=${user_timezone:-UTC}
 fi
 
 [ -z "$mirrors" ] && mirrors=$(get_mirrors)
