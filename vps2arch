@@ -135,7 +135,6 @@ install_packages() {
 	# XXX Install gptdisk for syslinux. To be removed then FS#45029 will be closed
 	[ "$bootloader" = "syslinux" ] && packages+=(gptfdisk)
 	[ -f /sys/firmware/efi/fw_platform_size ] && packages+=(efibootmgr)
-	[ "$network" = "netctl" ] && packages+=(netctl)
 	while read -r _ mountpoint filesystem _; do
 		[ "$mountpoint" = "/" ] && [ "$filesystem" = "xfs" ] && packages+=(xfsprogs)
 	done < /proc/mounts
@@ -257,19 +256,6 @@ configure_network() {
 			echo "Address=$ip"
 		done >> /etc/systemd/network/default.network
 		systemctl enable systemd-networkd
-	elif [ "$network" = "netctl" ]; then
-		cat > /etc/netctl/default <<-EOF
-			Interface=$dev
-			Connection=ethernet
-			IP=static
-			Address=($ip)
-		EOF
-		if [ "$gateway" = "0.0.0.0" ]; then
-			echo 'Routes=(0.0.0.0/0)'
-		else
-			echo "Gateway=$gateway"
-		fi >> /etc/netctl/default
-		netctl enable default
 	fi
 
 	systemctl enable sshd
@@ -391,7 +377,7 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 		mirrors+=("$OPTARG")
 		;;
 	n)
-		if ! { [ "$OPTARG" = "systemd-networkd" ] || [ "$OPTARG" = "netctl" ] || [ "$OPTARG" = "none" ]; }; then
+		if ! { [ "$OPTARG" = "systemd-networkd" ] || [ "$OPTARG" = "none" ]; }; then
 			echo "Invalid networking configuration system specified" >&2
 			exit 1
 		fi
@@ -427,7 +413,7 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 
 			  Options:
 			    -b (grub|syslinux)           Use the specified bootloader. When this option is omitted, it defaults to grub.
-			    -n (systemd-networkd|netctl) Use the specified networking configuration system. When this option is omitted, it defaults to systemd-networkd.
+			    -n (systemd-networkd|none)   Use the specified networking configuration system. When this option is omitted, it defaults to systemd-networkd.
 			    -m mirror                    Use the provided mirror (you can specify this option more than once).
 			    -p port                      Use the specified SSH port.
 			    -l locale                    Use the specified locale.
@@ -441,7 +427,7 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 			    -h                           Print this help message
 
 			    Warning:
-			      On OpenVZ containers the bootloader will be not installed and the networking configuration system will be enforced to netctl.
+			      On OpenVZ containers the bootloader will be not installed.
 		EOF
 		exit 0
 		;;
@@ -533,7 +519,6 @@ fi
 
 if is_openvz; then
 	bootloader=none
-	network=netctl
 elif is_lxc; then
 	bootloader=none
 fi
