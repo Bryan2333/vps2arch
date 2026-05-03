@@ -325,6 +325,16 @@ finalize() {
 		;;
 	esac
 
+	# Configure swap file
+	if [ "$swap_size" -gt 0 ] 2>/dev/null; then
+		swapoff /swapfile 2>/dev/null || true
+		dd if=/dev/zero of=/swapfile bs=1M count=$((swap_size * 1024)) status=progress
+		chmod 600 /swapfile
+		mkswap /swapfile
+		swapon /swapfile
+		echo "/swapfile none swap defaults 0 0" >> /etc/fstab
+	fi
+
 	# Set mirrorlist
 	: > /etc/pacman.d/mirrorlist
 	for m in $(get_mirrors); do
@@ -353,9 +363,10 @@ user_timezone=
 user_dns=
 user_hostname=
 enable_bbr=
+swap_size=
 mirrors=
 
-while getopts ":b:m:n:p:l:z:d:H:k:Bh" opt; do
+while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 	case $opt in
 	b)
 		if ! [ "$OPTARG" = "grub" -o "$OPTARG" = "syslinux" -o "$OPTARG" = "none" ]; then
@@ -395,6 +406,9 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bh" opt; do
 	B)
 		enable_bbr=y
 		;;
+	s)
+		swap_size="$OPTARG"
+		;;
 	h)
 		cat <<-EOF
 			usage: ${0##*/} [options]
@@ -410,6 +424,7 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bh" opt; do
 			    -H hostname                  Use the specified hostname.
 			    -k "ssh-key"                 Use the specified public key for root login.
 			    -B                           Enable BBR.
+			    -s size                      Create a swap file of the specified size (in GiB).
 
 			    -h                           Print this help message
 
@@ -479,6 +494,28 @@ if [ -z "$enable_bbr" ]; then
 	read -r enable_bbr
 fi
 
+if [ -z "$swap_size" ]; then
+	# Check if there are any swap partitions. Swap files are ignored because
+	# they will be deleted during the reinstallation process.
+	if [ "$(swapon --show=TYPE --noheadings | grep -c "partition")" -eq 0 ]; then
+		[ "$(swapon --show --noheadings | wc -l)" -gt 0 ] && printf "Only file-based swap detected (will be deleted).\n"
+		printf "No swap partition detected. Do you want to add a swap file? [y/N]: "
+		read -r add_swap
+		case "$add_swap" in
+		[yY][eE][sS]|[yY])
+			printf "Enter swap file size in GiB [1]: "
+			read -r swap_size
+			swap_size=${swap_size:-1}
+			;;
+		*)
+			swap_size=0
+			;;
+		esac
+	else
+		swap_size=0
+	fi
+fi
+
 [ -z "$mirrors" ] && mirrors=$(get_mirrors)
 
 
@@ -493,6 +530,7 @@ cd /
 download_and_extract_bootstrap
 configure_chroot
 save_root_pass
+swapoff -a 2>/dev/null || true
 delete_all
 install_packages
 restore_root_pass
