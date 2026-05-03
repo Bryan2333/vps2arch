@@ -149,6 +149,20 @@ delete_all() {
 	find / \( ! -path '/dev/*' -and ! -path '/proc/*' -and ! -path '/sys/*' -and ! -path '/selinux/*' -and ! -path "/root.$cpu_type/*" \) -delete 2>/dev/null || true
 }
 
+confirm_delete_all() {
+	[ "$noconfirm" = "y" ] && return 0
+	printf "WARNING: this will delete all files from the current system before installing Arch Linux. Continue? [y/N]: "
+	read -r confirm_delete
+	case "$confirm_delete" in
+	[yY][eE][sS]|[yY])
+		;;
+	*)
+		echo "Aborted before deleting the current system."
+		exit 1
+		;;
+	esac
+}
+
 install_packages() {
 	local kernel_package
 	kernel_package=$(get_kernel_package)
@@ -380,7 +394,21 @@ user_hostname=
 enable_bbr=
 use_zen_kernel=
 swap_size=
+noconfirm=
 mirrors=()
+
+args=()
+for arg in "$@"; do
+	case "$arg" in
+	--noconfirm)
+		noconfirm=y
+		;;
+	*)
+		args+=("$arg")
+		;;
+	esac
+done
+set -- "${args[@]}"
 
 while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 	case $opt in
@@ -442,6 +470,7 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 			    -k "ssh-key"                 Use the specified public key for root login.
 			    -B                           Enable BBR.
 			    -s size                      Create a swap file of the specified size (in GiB).
+			    --noconfirm                  Do not ask for confirmation before deleting the current system.
 
 			    -h                           Print this help message
 		EOF
@@ -567,6 +596,7 @@ download_and_extract_bootstrap
 configure_chroot
 save_root_pass
 swapoff -a 2>/dev/null || true
+confirm_delete_all
 delete_all
 install_packages
 restore_root_pass
