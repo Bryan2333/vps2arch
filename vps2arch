@@ -25,9 +25,13 @@ else
 	exit 2
 fi
 
-get_mirrors() {
-	echo "https://fastly.mirror.pkgbuild.com/ https://geo.mirror.pkgbuild.com/ https://ftpmirror.infania.net/mirror/archlinux/ http://mirror.rackspace.com/archlinux/ https://mirror.rackspace.com/archlinux/"
-}
+get_mirrors=(
+	"https://fastly.mirror.pkgbuild.com/"
+	"https://geo.mirror.pkgbuild.com/"
+	"https://ftpmirror.infania.net/mirror/archlinux/"
+	"http://mirror.rackspace.com/archlinux/"
+	"https://mirror.rackspace.com/archlinux/"
+)
 
 cpu_type=$(uname -m)
 
@@ -37,7 +41,7 @@ is_lxc() { grep -aqw container=lxc /proc/1/environ ; }
 download() {
 	local path="$1" x=
 	shift
-	for x in $mirrors; do
+	for x in "${mirrors[@]}"; do
 		_download "$x$path" && return 0
 	done
 	return 1
@@ -84,7 +88,7 @@ chroot_exec() {
 
 configure_chroot() {
 	local m
-	for m in $mirrors; do
+	for m in "${mirrors[@]}"; do
 		echo 'Server = '"$m"'/$repo/os/$arch'
 	done >> "/root.$cpu_type/etc/pacman.d/mirrorlist"
 	# Install and initialize haveged if needed
@@ -345,7 +349,7 @@ finalize() {
 
 	# Set mirrorlist
 	: > /etc/pacman.d/mirrorlist
-	for m in $(get_mirrors); do
+	for m in "${mirrors[@]}"; do
 		echo "Server = $m\$repo/os/\$arch" >> /etc/pacman.d/mirrorlist
 	done
 
@@ -372,7 +376,7 @@ user_dns=
 user_hostname=
 enable_bbr=
 swap_size=
-mirrors=
+mirrors=()
 
 while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 	case $opt in
@@ -384,7 +388,7 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 		bootloader="$OPTARG"
 		;;
 	m)
-		mirrors="${mirrors:+$mirrors }$OPTARG"
+		mirrors+=("$OPTARG")
 		;;
 	n)
 		if ! { [ "$OPTARG" = "systemd-networkd" ] || [ "$OPTARG" = "netctl" ] || [ "$OPTARG" = "none" ]; }; then
@@ -524,7 +528,7 @@ if [ -z "$swap_size" ]; then
 	fi
 fi
 
-[ -z "$mirrors" ] && mirrors=$(get_mirrors)
+[ ${#mirrors[@]} -eq 0 ] && mirrors=("${get_mirrors[@]}")
 
 
 if is_openvz; then
