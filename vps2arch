@@ -38,6 +38,17 @@ cpu_type=$(uname -m)
 is_openvz() { [ -d /proc/vz ] && [ ! -d /proc/bc ]; }
 is_lxc() { grep -aqw container=lxc /proc/1/environ ; }
 
+get_kernel_package() {
+	case "$use_zen_kernel" in
+	[yY][eE][sS]|[yY])
+		echo linux-zen
+		;;
+	*)
+		echo linux
+		;;
+	esac
+}
+
 download() {
 	local path="$1" x=
 	shift
@@ -130,7 +141,9 @@ delete_all() {
 }
 
 install_packages() {
-	local packages=(base linux lvm2 openssh vim bash-completion)
+	local kernel_package
+	kernel_package=$(get_kernel_package)
+	local packages=(base "$kernel_package" lvm2 openssh vim bash-completion)
 	[ "$bootloader" != "none" ] && packages+=("$bootloader")
 	# XXX Install gptdisk for syslinux. To be removed then FS#45029 will be closed
 	[ "$bootloader" = "syslinux" ] && packages+=(gptfdisk)
@@ -219,9 +232,11 @@ configure_bootloader() {
 	fi
 
 	if [ $needs_lvm2 -eq 1 ]; then
+		local kernel_package
+		kernel_package=$(get_kernel_package)
 		mv /etc/lvm/lvm.conf.bak /etc/lvm/lvm.conf
 		sed -i '/HOOKS/s/block/& lvm2/' /etc/mkinitcpio.conf
-		mkinitcpio -p linux
+		mkinitcpio -p "$kernel_package"
 	fi
 }
 
@@ -316,8 +331,14 @@ finalize() {
 	# Configure BBR
 	case $enable_bbr in
 	y|Y|yes|YES)
+		local default_qdisc=fq_pie
+		case "$use_zen_kernel" in
+		[yY][eE][sS]|[yY])
+			default_qdisc=cake
+			;;
+		esac
 		cat > /etc/sysctl.d/99-bbr.conf <<-EOF
-			net.core.default_qdisc = fq_pie
+			net.core.default_qdisc = $default_qdisc
 			net.ipv4.tcp_congestion_control = bbr
 		EOF
 		;;
@@ -361,6 +382,7 @@ user_timezone=
 user_dns=
 user_hostname=
 enable_bbr=
+use_zen_kernel=
 swap_size=
 mirrors=()
 
@@ -490,6 +512,11 @@ fi
 if [ -z "$enable_bbr" ]; then
 	printf "Enable BBR? [y/N]: "
 	read -r enable_bbr
+fi
+
+if [ -z "$use_zen_kernel" ]; then
+	printf "Use linux-zen kernel? [y/N]: "
+	read -r use_zen_kernel
 fi
 
 if [ -z "$swap_size" ]; then
