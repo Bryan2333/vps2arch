@@ -15,13 +15,13 @@ Added:
 - Locale, timezone, DNS, hostname, SSH, timesync, resolved, BBR, mirrorlist, and optional swap file configuration in the installed system.
 - `linux-zen` kernel support.
 - `bash-completion` installation and root skeleton file copying.
-- Version-aware OpenVZ kernel checks.
 
 Removed:
 
 - Country-based mirror discovery through the Arch mirrorlist API.
 - Post-install mirror generation through `reflector`.
 - `netctl` networking support.
+- OpenVZ-specific support and compatibility workarounds.
 - Backup and restore of the old system's hostname and localtime files.
 
 Credits

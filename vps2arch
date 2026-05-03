@@ -35,7 +35,6 @@ get_mirrors=(
 
 cpu_type=$(uname -m)
 
-is_openvz() { [ -d /proc/vz ] && [ ! -d /proc/bc ]; }
 is_lxc() { grep -aqw container=lxc /proc/1/environ ; }
 
 get_kernel_package() {
@@ -88,7 +87,7 @@ download_and_extract_bootstrap() {
 	findmnt /boot/efi >/dev/null && mount --bind /boot/efi "/root.$cpu_type/mnt/boot/efi"
 	# Workaround for Debian
 	mkdir -p "/root.$cpu_type/run/shm"
-	# Workaround for OpenVZ
+	# Keep pacman's disk-space checks aligned with the host mount table.
 	rm -f "/root.$cpu_type/etc/mtab"
 	cp -L /etc/mtab "/root.$cpu_type/etc/mtab"
 }
@@ -103,7 +102,7 @@ configure_chroot() {
 		echo 'Server = '"$m"'/$repo/os/$arch'
 	done >> "/root.$cpu_type/etc/pacman.d/mirrorlist"
 	# Install and initialize haveged if needed
-	if ! is_openvz && ! pidof haveged >/dev/null; then
+	if ! pidof haveged >/dev/null; then
 		# Disable signature check, install and launch haveged and re-enable signature checks.
 		sed -i.bak "s/^[[:space:]]*SigLevel[[:space:]]*=.*$/SigLevel = Never/" "/root.$cpu_type/etc/pacman.conf"
 		chroot_exec 'pacman --needed --noconfirm -Sy haveged && haveged'
@@ -119,10 +118,6 @@ configure_chroot() {
 	chroot_exec 'locale-gen'
 	echo "LANG=$user_locale" > "/root.$cpu_type/etc/locale.conf"
 
-	if is_openvz && [ "$(printf '%s\n2.6.32-042stab111.1' "$kernelver" | sort -V | head -n1)" = "$kernelver" ] && [ "$kernelver" != "2.6.32-042stab111.1" ]; then
-		# Use my repository for OpenVZ-patched systemd
-		sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' "/root.$cpu_type/etc/pacman.conf"
-	fi
 }
 
 save_root_pass() {
@@ -277,19 +272,6 @@ configure_network() {
 }
 
 finalize() {
-	# OpenVZ hacks
-	if is_openvz; then
-		local kernelver
-		read -r _ _ kernelver _ < /proc/version
-		if [ "$(printf '%s\n3.10' "$kernelver" | sort -V | tail -n1)" = "$kernelver" ] && [ "$kernelver" != "3.10" ]; then
-			# Virtuozzo 7 works with systemd, but it needs /etc/resolvconf/resolv.conf.d directory
-			mkdir -p /etc/resolvconf/resolv.conf.d
-		elif [ "$(printf '%s\n2.6.32-042stab111.1' "$kernelver" | sort -V | head -n1)" = "$kernelver" ] && [ "$kernelver" != "2.6.32-042stab111.1" ]; then
-			# Use my repository for OpenVZ-patched systemd
-			sed -i 's;^#\[testing\]$;[tredaelli-systemd]\nServer = http://pkgbuild.com/~tredaelli/repo/systemd/$arch\n\n&;' /etc/pacman.conf
-		fi
-	fi
-
 	# Enable SSH login for user root (#3)
 	if [ -n "$ssh_key" ]; then
 		mkdir -p /root/.ssh
@@ -447,9 +429,6 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 			    -s size                      Create a swap file of the specified size (in GiB).
 
 			    -h                           Print this help message
-
-			    Warning:
-			      On OpenVZ containers the bootloader will be not installed.
 		EOF
 		exit 0
 		;;
@@ -563,9 +542,7 @@ fi
 [ ${#mirrors[@]} -eq 0 ] && mirrors=("${get_mirrors[@]}")
 
 
-if is_openvz; then
-	bootloader=none
-elif is_lxc; then
+if is_lxc; then
 	bootloader=none
 fi
 
