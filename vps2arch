@@ -484,8 +484,12 @@ if [ -z "$user_timezone" ]; then
 fi
 
 if [ -z "$user_dns" ]; then
-	printf "Enter DNS servers [1.1.1.1]: "
-	read -r user_dns
+	printf "Enter DNS server [1.1.1.1] (empty line to finish): "
+	while read -r dns_server; do
+		[ -z "$dns_server" ] && break
+		user_dns="${user_dns:+$user_dns }$dns_server"
+		printf "Enter DNS server (empty line to finish): "
+	done
 	user_dns=${user_dns:-1.1.1.1}
 fi
 
