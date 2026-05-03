@@ -48,6 +48,20 @@ get_kernel_package() {
 	esac
 }
 
+normalize_mirror_url() {
+	local mirror=$1
+	while [[ $mirror = [[:space:]]* ]]; do mirror=${mirror#?}; done
+	while [[ $mirror = *[[:space:]] ]]; do mirror=${mirror%?}; done
+	mirror=${mirror#Server = }
+	mirror=${mirror#Server=}
+	mirror=${mirror%/}
+	mirror=${mirror%\$repo/os/\$arch}
+	mirror=${mirror%\$repo/os}
+	mirror=${mirror%os/\$arch}
+	mirror=${mirror%/}
+	[ -n "$mirror" ] && printf '%s/\n' "$mirror"
+}
+
 download() {
 	local path="$1" x=
 	shift
@@ -378,7 +392,8 @@ while getopts ":b:m:n:p:l:z:d:H:k:Bs:h" opt; do
 		bootloader="$OPTARG"
 		;;
 	m)
-		mirrors+=("$OPTARG")
+		mirror=$(normalize_mirror_url "$OPTARG")
+		[ -n "$mirror" ] && mirrors+=("$mirror")
 		;;
 	n)
 		if ! { [ "$OPTARG" = "systemd-networkd" ] || [ "$OPTARG" = "none" ]; }; then
@@ -510,7 +525,8 @@ if [ ${#mirrors[@]} -eq 0 ]; then
 		printf "Enter mirror URL (empty line to finish): "
 		while read -r mirror; do
 			[ -z "$mirror" ] && break
-			mirrors+=("$mirror")
+			mirror=$(normalize_mirror_url "$mirror")
+			[ -n "$mirror" ] && mirrors+=("$mirror")
 			printf "Enter mirror URL (empty line to finish): "
 		done
 		;;
