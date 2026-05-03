@@ -1,6 +1,16 @@
 VPS2Arch
 ========
 
+How To Use
+---
+```
+wget https://raw.githubusercontent.com/Bryan2333/vps2arch/refs/heads/master/vps2arch
+
+chmod +x vps2arch
+
+./vps2arch
+```
+
 Changes
 -------
 
