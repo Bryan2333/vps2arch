@@ -519,6 +519,21 @@ if [ -z "$use_zen_kernel" ]; then
 	read -r use_zen_kernel
 fi
 
+if [ ${#mirrors[@]} -eq 0 ]; then
+	printf "Do you want to use custom mirrors? [y/N]: "
+	read -r use_custom_mirrors
+	case "$use_custom_mirrors" in
+	[yY][eE][sS]|[yY])
+		printf "Enter mirror URL (empty line to finish): "
+		while read -r mirror; do
+			[ -z "$mirror" ] && break
+			mirrors+=("$mirror")
+			printf "Enter mirror URL (empty line to finish): "
+		done
+		;;
+	esac
+fi
+
 if [ -z "$swap_size" ]; then
 	# Check if there are any swap partitions. Swap files are ignored because
 	# they will be deleted during the reinstallation process.
