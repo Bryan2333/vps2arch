@@ -568,8 +568,12 @@ if [ -z "$ssh_key" ]; then
 	read -r use_key
 	case "$use_key" in
 	[yY][eE][sS]|[yY])
-		printf "Enter public key: "
-		read -r ssh_key
+		printf "Enter public key (empty line to finish): "
+		while read -r key; do
+			[ -z "$key" ] && break
+			ssh_key="${ssh_key:+$ssh_key$'\n'}$key"
+			printf "Enter public key (empty line to finish): "
+		done
 		;;
 	*)
 		ssh_key=""
