@@ -15,6 +15,10 @@
 
 set -e
 
+# Avoid inheriting a host locale that is not generated in the bootstrap or target system yet.
+export LC_ALL=C
+export LANG=C
+
 # Gathering informations about actual environment.
 if command -v wget >/dev/null 2>&1; then
 	_download() { wget -U vps2arch -O- "$@" ; }
@@ -107,7 +111,45 @@ download_and_extract_bootstrap() {
 }
 
 chroot_exec() {
-	chroot "/root.$cpu_type" /bin/bash -c "$*"
+	chroot "/root.$cpu_type" /usr/bin/env LC_ALL=C LANG=C /bin/bash -c "$*"
+}
+
+configure_locale() {
+	local root="$1" locale_name tmp
+	locale_name=${user_locale%%[[:space:]]*}
+	if [ -z "$locale_name" ]; then
+		echo "Invalid locale specified" >&2
+		exit 1
+	fi
+
+	tmp="$root/etc/locale.gen.tmp.$$"
+	awk -v locale="$locale_name" '
+		{
+			line = $0
+			uncommented = line
+			sub(/^#/, "", uncommented)
+			split(uncommented, fields, /[[:space:]]+/)
+			if (fields[1] == locale) {
+				print uncommented
+				found = 1
+			} else {
+				print line
+			}
+		}
+		END {
+			if (!found) {
+				print locale " UTF-8"
+			}
+		}
+	' "$root/etc/locale.gen" > "$tmp"
+	mv "$tmp" "$root/etc/locale.gen"
+
+	if [ "$root" = "/" ]; then
+		LC_ALL=C LANG=C locale-gen
+	else
+		chroot "$root" /usr/bin/env LC_ALL=C LANG=C /bin/bash -c 'locale-gen'
+	fi
+	echo "LANG=$locale_name" > "$root/etc/locale.conf"
 }
 
 configure_chroot() {
@@ -126,11 +168,6 @@ configure_chroot() {
 	chroot_exec 'pacman --needed --noconfirm -Sy archlinux-keyring'
 	# Generate fstab
 	chroot_exec 'genfstab /mnt >> /etc/fstab'
-
-	# Configure locale
-	sed -i "s/^#\($user_locale\)/\1/" "/root.$cpu_type/etc/locale.gen"
-	chroot_exec 'locale-gen'
-	echo "LANG=$user_locale" > "/root.$cpu_type/etc/locale.conf"
 
 }
 
@@ -178,7 +215,8 @@ install_packages() {
 	local ld_so
 	for ld_so in "/root.$cpu_type/usr/lib"/ld-*.so.2; do [ -f "$ld_so" ] && break; done
 	"$ld_so" --library-path "/root.$cpu_type/usr/lib" \
-		"/root.$cpu_type/usr/bin/chroot" "/root.$cpu_type" /usr/bin/pacstrap -M /mnt "${packages[@]}"
+		"/root.$cpu_type/usr/bin/chroot" "/root.$cpu_type" \
+		/usr/bin/env LC_ALL=C LANG=C /usr/bin/pacstrap -M /mnt "${packages[@]}"
 	cp -L "/root.$cpu_type/etc/resolv.conf" /etc
 
 	# Copy skel files to /root
@@ -316,6 +354,9 @@ finalize() {
 
 	# Configure timezone
 	ln -sf "/usr/share/zoneinfo/$user_timezone" /etc/localtime
+
+	# Configure locale
+	configure_locale /
 
 	# Configure systemd-timesyncd
 	mkdir -p /etc/systemd/timesyncd.conf.d
